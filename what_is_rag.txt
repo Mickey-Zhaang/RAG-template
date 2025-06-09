@@ -1,0 +1,118 @@
+Retrieval-Augmented Generation (RAG)
+
+1. Definition
+Retrieval-Augmented Generation (RAG) is an approach in natural language processing that combines external information retrieval with language model generation. Rather than relying solely on the language model’s pretraining knowledge, RAG fetches relevant documents or data at query time and feeds them to the model, yielding more accurate, up-to-date, and contextually grounded responses.
+
+2. Historical Context
+- Traditional LLMs generate based on patterns learned during pretraining, which can become stale or hallucinate when asked about niche or newly-emerged topics.
+- Retrieval-augmented methods emerged to mitigate these issues by providing fresh context from external sources, beginning with research like REALM (Google, 2020) and subsequent studies such as RAG by Facebook AI Research (2021).
+
+3. Core Components
+a. Embedding Model
+   - Transforms text into high-dimensional vectors.
+   - Popular choices: OpenAI’s text-embedding-ada-002, SentenceTransformers.
+b. Vector Store / Retriever
+   - Stores document embeddings, supports nearest-neighbor search.
+   - Examples: FAISS, Chroma, Qdrant, Pinecone.
+c. Generation Model
+   - A large language model (e.g., GPT-4, GPT-3.5, LLaMA).
+   - Receives retrieved context plus the query to generate a response.
+d. Prompting / Chain
+   - Logic that constructs the combined prompt.
+   - Variants: “stuff” (concatenate all docs), “map_reduce”, “refine”.
+
+4. Typical Workflow
+1. Indexing Phase
+   - Split source documents into chunks (sentences, paragraphs).
+   - Generate embeddings for each chunk.
+   - Store embeddings in a vector store.
+2. Query Phase
+   - Receive a user query.
+   - Generate an embedding for the query.
+   - Retrieve top-k closest document chunks from the vector store.
+   - Construct a prompt that includes the query and retrieved snippets.
+   - Pass the prompt to the generation model.
+   - Return the model’s answer, optionally with source citations.
+
+5. Retrieval Techniques
+- k-NN Search: find k nearest neighbors via cosine similarity or L2 distance.
+- Hybrid search: combine keyword-based filters with vector similarity.
+- Filtering: apply metadata or attribute-based filters before retrieval.
+
+6. Prompt Engineering
+- Order: place the most relevant snippets first.
+- Formatting: separate context from query with clear delimiters.
+- Instructions: instruct the model to use or cite specific passages.
+
+7. Chain Types
+- Stuff: simple concatenation of all retrieved contexts into one prompt.
+- Map-Reduce: process each chunk separately (map), then combine partial answers (reduce).
+- Refinement: generate an initial answer, then iteratively refine it with additional context.
+
+8. Popular Libraries & Tooling
+- LangChain: high-level chains, retrievers, integration with vector stores.
+- LlamaIndex (GPT Index): structured indices and query interfaces.
+- Haystack: end-to-end pipelines focusing on production deployment.
+- OpenAI function-calling: embed retrieval results into structured function calls.
+
+9. Use Cases
+- Question answering over domain-specific docs (legal, medical, technical).
+- Chatbots with up-to-date knowledge (company FAQs, product manuals).
+- Research assistants that cite sources explicitly.
+- Summarization with background context from recent publications.
+
+10. Benefits
+- Accuracy: reduces hallucination by grounding in retrieved text.
+- Freshness: can index new data without retraining the LLM.
+- Explainability: provides source documents alongside generated answers.
+
+11. Challenges & Limitations
+- Context Window: limited by the model’s maximum tokens; too many snippets can overflow.
+- Latency: retrieval and prompt construction add overhead.
+- Retrieval Quality: depends on embedding quality and vector index performance.
+- Cost: embedding and large-model API calls incur additional expense.
+
+12. Best Practices
+- Chunk size: balance semantic coherence with prompt size limits.
+- k value: choose k to provide enough context without exceeding token budgets.
+- Index maintenance: update or refresh indices as source data changes.
+- Temperature: set to low (e.g., 0) for factual QA; higher for creative tasks.
+
+13. Advanced Techniques
+- Re-ranking: use a separate cross-encoder to re-score retrieved passages.
+- Feedback loops: use user feedback to improve retrieval via fine-tuning or re-indexing.
+- Multi-modal RAG: retrieve from image, audio, or database sources alongside text.
+
+14. Future Directions
+- Integration with knowledge graphs for structured retrieval.
+- Better handling of long documents via hierarchical indexing.
+- Adaptive retrieval: dynamically adjust k or chunk size per query.
+- Model-in-the-loop retrieval: joint optimization of retrieval and generation.
+
+15. Code Example (Pure Python + FAISS)
+```python
+import os, faiss, numpy as np, openai
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
+docs = ["Doc A text...", "Doc B text..."]
+# Create embeddings
+embs = np.vstack([
+    np.array(openai.Embedding.create(model="text-embedding-ada-002", input=d)["data"][0]["embedding"], dtype="float32")
+    for d in docs
+])
+# Build FAISS index
+index = faiss.IndexFlatL2(embs.shape[1])
+index.add(embs)
+# Query
+q = "Explain RAG"
+q_emb = np.array(openai.Embedding.create(model="text-embedding-ada-002", input=q)["data"][0]["embedding"], dtype="float32").reshape(1,-1)
+_, idxs = index.search(q_emb, k=2)
+retrieved = [docs[i] for i in idxs[0]]
+prompt = """Context:
+{}\n
+Question: {}
+Answer:""".format("\n".join(retrieved), q)
+response = openai.ChatCompletion.create(model="gpt-4o-mini", messages=[{"role":"user","content":prompt}])
+print(response.choices[0].message.content)
+```
+
